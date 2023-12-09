@@ -107,7 +107,7 @@ private void OnDestroy()
 
 ## 활용
 
-![스크린샷 2023-12-10 032214.png](%E1%84%8C%E1%85%A6%E1%84%86%E1%85%A9%E1%86%A8%20%E1%84%8B%E1%85%A5%E1%86%B9%E1%84%8B%E1%85%B3%E1%86%B7%201dcf4e7ff62b411695ad549ea3aa5b73/%25EC%258A%25A4%25ED%2581%25AC%25EB%25A6%25B0%25EC%2583%25B7_2023-12-10_032214.png)
+![스크린샷 2023-12-10 032214.png](https://github.com/phw97123/TodangTodangCode_PHW/assets/132995834/42401187-f7bc-4936-acf0-1a83467022c5)
 
 ```csharp
 foreach (Transform child in childTransforms)
