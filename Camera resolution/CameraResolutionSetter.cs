@@ -1,60 +1,61 @@
+using System.Collections;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class CameraResolution : MonoBehaviour
 {
+    [SerializeField] private Transform _standardResolution;
+
     private Camera _camera;
-    private int defaultAspectRatio;
-    private int previousAspectRatio;
+    private int previousRatio;
 
     private void Start()
     {
         _camera = Camera.main;
-        defaultAspectRatio = 2400 / 1080;
-        UpdateCameraSize();
     }
 
     private void Update()
     {
-        int currentAspectRatio = Screen.width / Screen.height;
+        int currentRatio = Screen.width / Screen.height;
 
-        if (!currentAspectRatio.Equals(previousAspectRatio))
+        if (!currentRatio.Equals(previousRatio))
         {
-            previousAspectRatio = currentAspectRatio;
-            UpdateCameraSize();
+            previousRatio = currentRatio;
+
+            if (IsObjectInScreen())
+            {
+                if (_camera.orthographic)
+                    _camera.orthographicSize = Numbers.DEFAULT_ORTHOGRAPHICSIZE;
+                else
+                    _camera.fieldOfView = Numbers.DEFAULT_FIELDOFVIEW;
+            }
+            else
+            {
+                StartCoroutine(UpdateCameraSize());
+            }
         }
     }
 
-    private void UpdateCameraSize()
+    private IEnumerator UpdateCameraSize()
     {
-        int currentAspectRatio = Screen.width / Screen.height;
-
-        if (_camera.orthographic)
+        while (!IsObjectInScreen())
         {
-            if (defaultAspectRatio.Equals(currentAspectRatio))
-            {
-                _camera.orthographicSize = 8;
-            }
+            if (_camera.orthographic)
+                _camera.orthographicSize += 1;
             else
-            {
-                int max = Mathf.Max(defaultAspectRatio, currentAspectRatio);
-                int min = Mathf.Min(defaultAspectRatio, currentAspectRatio);
+                _camera.fieldOfView += 1;
 
-                _camera.orthographicSize = 14 - (max - min);
-            }
+            yield return null;
         }
-        else
-        {
-            if (defaultAspectRatio.Equals(currentAspectRatio))
-            {
-                _camera.fieldOfView = 20;
-            }
-            else
-            {
-                int max = Mathf.Max(defaultAspectRatio, currentAspectRatio);
-                int min = Mathf.Min(defaultAspectRatio, currentAspectRatio);
+    }
 
-                _camera.fieldOfView = 25 - (max - min);
-            }
-        }
+    private bool IsObjectInScreen()
+    {
+        Vector3 updatedScreenPoint = _camera.WorldToScreenPoint(_standardResolution.position);
+        int screenWidth = Screen.width;
+        int screenHeight = Screen.height;
+
+        return (updatedScreenPoint.x >= 0 && updatedScreenPoint.x <= screenWidth &&
+                updatedScreenPoint.y >= 0 && updatedScreenPoint.y <= screenHeight);
     }
 }

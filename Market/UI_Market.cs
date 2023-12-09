@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Resources;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-
-
+using static System.Net.Mime.MediaTypeNames;
 
 public class UI_Market : UI_Base
 {
@@ -25,28 +26,53 @@ public class UI_Market : UI_Base
     [SerializeField] private Button _exitBtn;
     private UI_CartSlot[] _cartSlots;
 
-    [SerializeField] private MarketController _controller;
-
     private SoundManager _soundManager;
+    private ResourceManager _resourceManager;
+    private GameManager _gameManager;
+    private DataManager _dataManager;
+    private UIManager _uiManager;
 
     private Enums.MarketTabType _selectedTab = Enums.MarketTabType.Total;
-    private bool _isAscendingOrder = true;
 
     private int _playerMoney;
     private int _totalOrderAmount;
 
-    public event Action OrderSubmitted;
+    public event Action OnOrderSubmitted;
+    public event Action<Enums.MarketTabType> OnChangeTab;
+    public event Action OnSort;
     public event Action<bool> OnTutorialClosed;
 
+    public bool IsAscendingOrder { get; private set; } = true;
+
+    private void Awake()
+    {
+        if (_soundManager == null) _soundManager = SoundManager.Instance;
+        if (_resourceManager == null) _resourceManager = ResourceManager.Instance;
+        if (_gameManager == null) _gameManager = GameManager.Instance;
+        if (_dataManager == null) _dataManager = DataManager.Instance;
+        if (_uiManager == null) _uiManager = UIManager.Instance;
+
+
+        Debug.Assert(_soundManager != null, "Null Exception : SoundManager");
+        Debug.Assert(_resourceManager != null, "Null Exception : ResourceManager");
+        Debug.Assert(_gameManager != null, "Null Exception : GameManager");
+        Debug.Assert(_dataManager != null, "Null Exception : DataManager");
+        Debug.Assert(_uiManager != null, "Null Exception : UIManager");
+
+        InitBind();
+    }
 
     private void Start()
     {
-        _playerMoney = GameManager.Instance.GetPlayerData().Money;
-        _soundManager = SoundManager.Instance;
-
+        _playerMoney = _gameManager.GetPlayerData().Money;
         _totalOrderAmount = 0;
 
-        InitBind();
+        _playerMoneyText.text = _playerMoney.ToString();
+        _totalOrderAmountText.text = _totalOrderAmount.ToString();
+
+        _sortBtnText.text = Strings.Market.ASCENDINGSORT_TEXT;
+        _orderBtn.interactable = false;
+
         SetSelectedTab(Enums.MarketTabType.Total);
     }
 
@@ -57,35 +83,31 @@ public class UI_Market : UI_Base
 
     public override void CloseUI(bool isSound = true, bool isAnimated = true)
     {
-
-        UIManager.Instance.ShowPopup<UI_DefaultPopup>(
+        _uiManager.ShowPopup<UI_DefaultPopup>(
             new PopupParameter(
                 content: Strings.Market.EXITCONFIRM
                 , confirmCallback: Exit
                 , cancelCallback: null
                 )
-            );  ;
+            ); ;
     }
 
+    // 이벤트 바인딩
     private void InitBind()
     {
         for (int i = 0; i < _tabBtn.Length; i++)
         {
             int index = i;
-            _tabBtn[i].onClick.AddListener(() => OnTabButtonClick((Enums.MarketTabType)index));
+            _tabBtn[i].onClick.AddListener(() => OnTabButton((Enums.MarketTabType)index));
         }
 
-        _sortBtn.onClick.AddListener(OnSortButtonClick);
-        _orderBtn.onClick.AddListener(OnOrderButtonClick);
-        _exitBtn.onClick.AddListener(()=>CloseUI(true));
-
-        _playerMoneyText.text = _playerMoney.ToString();
-        _totalOrderAmountText.text = _totalOrderAmount.ToString();
-
-        _orderBtn.interactable = false;
+        _sortBtn.onClick.AddListener(OnSortButton);
+        _orderBtn.onClick.AddListener(OnOrderButton);
+        _exitBtn.onClick.AddListener(() => CloseUI(true));
     }
 
-    public void InitIngredientSlot(List<IngredientInfoData> data)
+    // Slot들 초기화 
+    public void InitIngredientSlots(List<IngredientInfoData> data)
     {
         _marketItemSlots = new UI_MarketItemSlot[data.Count()];
         _cartSlots = new UI_CartSlot[data.Count()];
@@ -95,82 +117,51 @@ public class UI_Market : UI_Base
             InitializeMarketItemSlot(data[i], i);
             InitializeCartSlot(data[i], i);
         }
-
-        SortMarketItemSlots();
     }
 
+    // 재료 슬롯 초기화 
     private void InitializeMarketItemSlot(IngredientInfoData data, int index)
     {
-        GameObject marketItemSlot = Instantiate(Resources.Load<UI_MarketItemSlot>(Strings.Prefabs.UI_MARKETITEMSLOT), _marKetItemContent.transform).gameObject;
+        GameObject marketItemSlot = _resourceManager.Instantiate(Strings.Prefabs.UI_MARKETITEMSLOT, _marKetItemContent.transform);
         _marketItemSlots[index] = marketItemSlot.GetComponent<UI_MarketItemSlot>();
 
-        Sprite foodType = GetFoodTypeIcon(data.DefaultData.Type);
-
-        int currentQuantity = data.Quantity;
-
-        _marketItemSlots[index].Initialize(index, data.DefaultData.Name, data.DefaultData.BaseExpirationDate.ToString(), currentQuantity, foodType, data.PriceAtBuy, data.DefaultData.IconSprite);
+        _marketItemSlots[index].Initialize(data, index);
     }
 
+    // 주문 내역 슬롯 초기화
     private void InitializeCartSlot(IngredientInfoData data, int index)
     {
-        GameObject cartSlot = Instantiate(Resources.Load<UI_CartSlot>(Strings.Prefabs.UI_CARTSLOT), _cartContent.transform).gameObject;
-
+        GameObject cartSlot = _resourceManager.Instantiate(Strings.Prefabs.UI_CARTSLOT, _cartContent.transform);
         _cartSlots[index] = cartSlot.GetComponent<UI_CartSlot>();
-        _cartSlots[index].Initialize(index, data.DefaultData.Name, 0, data.PriceAtBuy, data.DefaultData.IconSprite);
+        _cartSlots[index].Initialize(data, index);
 
-        _cartSlots[index].OnDeleteBtn += HandleCartSlotDelete;
-
-        _marketItemSlots[index].OnQuantityChange += () => _cartSlots[index].UpdateQuantity(_marketItemSlots[index].CurrentQuantity);
-        _marketItemSlots[index].OnQuantityChange += UpdateTotalOrderAmount;
-    }
-
-    private Sprite GetFoodTypeIcon(Enums.FoodType type)
-    {
-        string iconPath = (type == Enums.FoodType.Ricecake) ? Strings.Sprites.MARKET_RICECAKE_TYPE_ICON : Strings.Sprites.MARKET_TEA_TYPE_ICON;
-        return ResourceManager.Instance.LoadSprite(iconPath);
-    }
-
-    private void HandleCartSlotDelete(int index)
-    {
+        _cartSlots[index].OnDeleteBtn += () =>
         _marketItemSlots[index].UpdateQuantity(-_marketItemSlots[index].CurrentQuantity);
+        _marketItemSlots[index].OnQuantityChange += () => _cartSlots[index].UpdateQuantity(_marketItemSlots[index].CurrentQuantity);
     }
 
-    private void UpdateTotalOrderAmount()
+    // 총 주문 금액 업데이트 
+    public void UpdateTotalOrderAmount(int totalOrderAmount)
     {
-        _totalOrderAmount = 0;
-
-        foreach (var item in _marketItemSlots)
-        {
-            int quantity = item.CurrentQuantity;
-            int price = _controller.GetIngredientData(item.ItemIdx).PriceAtBuy;
-
-            int subtotal = price * quantity;
-            _totalOrderAmount += subtotal;
-        }
-
-        _totalOrderAmountText.text = _totalOrderAmount.ToString();
-
+        _totalOrderAmountText.text = totalOrderAmount.ToString();
         _orderBtn.interactable = !SetOrderButtonActivation();
     }
 
+    // 주문 버튼 활성화 여부 설정 
     private bool SetOrderButtonActivation()
     {
         return _cartSlots.All(slot => !slot.gameObject.activeSelf) || _playerMoney < _totalOrderAmount;
     }
 
-    private void OnTabButtonClick(Enums.MarketTabType tabType)
+    // 탭 버튼 클릭 시 호출
+    private void OnTabButton(Enums.MarketTabType tabType)
     {
-        _soundManager.Play(Strings.Sounds.UI_BUTTON); 
-
+        _soundManager.Play(Strings.Sounds.UI_BUTTON);
         SetSelectedTab(tabType);
-
-        foreach (var slot in _marketItemSlots)
-        {
-            bool shouldSetActive = tabType == Enums.MarketTabType.Total || _controller.GetIngredientInfoSO((slot.ItemIdx)).Type + 1 == (Enums.FoodType)tabType;
-            slot.gameObject.SetActive(shouldSetActive);
-        }
+        OnChangeTab.Invoke(tabType);
     }
 
+    // 선택된 탭 설정
     private void SetSelectedTab(Enums.MarketTabType tabType)
     {
         ChangeTabImage(_selectedTab, _defaultTabSprite);
@@ -178,44 +169,28 @@ public class UI_Market : UI_Base
         ChangeTabImage(tabType, _selectedTabSprite);
     }
 
+    // 탭 이미지 변경 
     private void ChangeTabImage(Enums.MarketTabType tabType, Sprite[] newImage)
     {
         _tabBtn[(int)tabType].GetComponent<Image>().sprite = newImage[(int)tabType];
     }
 
-    private void OnSortButtonClick()
+    // 정렬 버튼 클릭 시 호출
+    private void OnSortButton()
     {
         _soundManager.Play(Strings.Sounds.UI_BUTTON);
-        _isAscendingOrder = !_isAscendingOrder;
-        SortMarketItemSlots();
+        IsAscendingOrder = !IsAscendingOrder;
+
+        OnSort.Invoke();
+
+        _sortBtnText.text = IsAscendingOrder == true ? Strings.Market.ASCENDINGSORT_TEXT : Strings.Market.DESCENDINGSORT_TEXT;
     }
 
-    private void SortMarketItemSlots()
-    {
-        List<UI_MarketItemSlot> sortedSlots = _marketItemSlots.OrderBy(slot => _controller.GetIngredientData(GetItemIndex(slot)).PriceAtBuy).ToList();
-
-        if (!_isAscendingOrder)
-        {
-            sortedSlots.Reverse();
-        }
-
-        foreach (var slot in sortedSlots)
-        {
-            slot.transform.SetAsLastSibling();
-        }
-
-        _sortBtnText.text = _isAscendingOrder == true ? "가격순 ▲" : "가격순 ▼";
-    }
-
-    private int GetItemIndex(UI_MarketItemSlot slot)
-    {
-        return Array.IndexOf(_marketItemSlots, slot);
-    }
-
-    private void OnOrderButtonClick()
+    // 주문하기 버튼 클릭 시 호출
+    private void OnOrderButton()
     {
         if (_playerMoney >= _totalOrderAmount)
-        { 
+        {
             UIManager.Instance.ShowPopup<UI_DefaultPopup>(
                 new PopupParameter(
                     content: Strings.Market.ORDERCONFIRM
@@ -226,20 +201,27 @@ public class UI_Market : UI_Base
         }
     }
 
+    // 주문 처리 
     private void Order()
     {
-        _soundManager.Play(Strings.Sounds.UI_BUYANDSELL); 
-        OrderSubmitted?.Invoke();
-        Exit(); 
+        _soundManager.Play(Strings.Sounds.UI_BUYANDSELL);
+        OnOrderSubmitted?.Invoke();
+        Exit();
     }
 
+    // 종료 처리 
     private void Exit()
     {
         OnTutorialClosed?.Invoke(true);
 
-        GameManager.Instance.ChangeState(Enums.PlayerDayCycleState.DayEnd);
-        DataManager.Instance.SaveAllData();
+        _gameManager.ChangeState(Enums.PlayerDayCycleState.DayEnd);
+        _dataManager.SaveAllData();
         base.CloseUI();
+    }
+
+    public UI_MarketItemSlot[] GetMarketItemSlots()
+    {
+        return _marketItemSlots;
     }
 
     public List<UI_CartSlot> GetCartSlots()
