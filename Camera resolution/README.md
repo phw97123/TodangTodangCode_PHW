@@ -82,7 +82,7 @@ private IEnumerator UpdateCameraSize()
 
 - 2400 x1080 (기본)
 
-![2400x1080.png](%E1%84%8C%E1%85%A6%E1%84%86%E1%85%A9%E1%86%A8%20%E1%84%8B%E1%85%A5%E1%86%B9%E1%84%8B%E1%85%B3%E1%86%B7%204eb6456dbe3e40f087b1777eca3e99f9/2400x1080.png)
+![2400x1080.png](https://github.com/phw97123/TodangTodangCode_PHW/assets/132995834/1da4996e-f4c3-4fe8-83d5-d464add87a82)
 
 - Galaxy Fold 2152x1536 (해결 전)
 
