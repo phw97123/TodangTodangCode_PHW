@@ -1,6 +1,4 @@
-# TodangTodangCode_PHW
- 
-## 카메라 해상도 대응 
+ ## 카메라 해상도 대응 
 
 ## 개요
 
