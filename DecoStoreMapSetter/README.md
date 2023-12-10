@@ -1,6 +1,4 @@
-# TodangTodangCode_PHW
- 
-### DecoStore GameObject 배치
+## 확장성을 고려한 DecoStore GameObject 배치
 
 
 ## 개요
